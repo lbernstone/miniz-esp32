@@ -1,0 +1,10 @@
+# KEYWORD1 Classes, datatypes, and C++ keywords
+# KEYWORD2 Methods and functions
+# KEYWORD3 setup and loop functions, as well as the Serial keywords
+# LITERAL1 Constants
+# LITERAL2 Built-in variables (unused by default)
+
+RRD	KEYWORD1
+#start	KEYWORD2
+#stop	KEYWORD2
+#check	KEYWORD2
