@@ -1,25 +1,26 @@
-# Example to write a png file and deliver it through WebServer
-# Adapted directly from the example6 provided with miniz
+/* 
+* Example to write a png file and deliver it through WebServer
+* Adapted directly from the example6 provided with miniz
+*/
+
+#ifndef BOARD_HAS_PSRAM
+#pragma message("This utility will not work without PSRAM")
+#endif
+
+const int iXmax = 800;
+const int iYmax = 800;
+const uint32_t rawImg = iXmax * iYmax *3;
+const char *ssid = "ssid";
+const char *passwd = "password";
 
 #include <miniz.h>
-#include <stdio.h>
-#include <limits.h>
-#include <math.h>
 #include <SPIFFS.h>
 #include <WiFi.h>
 #include <WebServer.h>
 
-const int iXmax = 800;
-const int iYmax = 600;
-const char *ssid = "ssid";
-const char *passwd = "mypasswd";
-
-typedef unsigned char uint8;
-typedef unsigned short uint16;
-typedef unsigned int uint;
-
 WebServer server;
 
+typedef unsigned char uint8;
 typedef struct
 {
   uint8 r, g, b;
@@ -58,7 +59,7 @@ int writePng(const char* pFilename)
 
   // Image resolution
 
-  uint32_t time_start = millis();
+  uint32_t time1 = millis();
   int iX, iY;
   const double CxMin = -2.5;
   const double CxMax = 1.5;
@@ -78,12 +79,8 @@ int writePng(const char* pFilename)
   // bail-out value , radius of circle
   const double EscapeRadius = 2;
   double ER2=EscapeRadius * EscapeRadius;
-#ifdef BOARD_HAS_PSRAM  
-      uint8 *pImage = (uint8 *)ps_malloc(iXmax * 3 * iYmax);
-#else
-      uint8 *pImage = (uint8 *)malloc(iXmax * 3 * iYmax);
-#endif
-  
+  uint8 *pImage = (uint8 *)ps_malloc(rawImg);
+
   if (!pImage) {
       log_e("Failed to allocate memory for image");
       return 0;
@@ -141,19 +138,23 @@ int writePng(const char* pFilename)
       hsv_to_rgb(Iterations, MinIter, MaxIter, (rgb_t *)color);
     }
   }
-
+  Serial.printf("Generation time %u ms\n", millis()-time1);
+  time1 = millis();
+  
   // Now write the PNG image.
     size_t png_data_size = 0;
   {
     void *pPNG_data = tdefl_write_image_to_png_file_in_memory_ex(pImage, iXmax, iYmax, 3, &png_data_size, 6, 0);
     if (!pPNG_data)
-      fprintf(stderr, "tdefl_write_image_to_png_file_in_memory_ex() failed!\n");
+      log_e("tdefl_write_image_to_png_file_in_memory_ex() failed!");
     else
     {
-      FILE *pFile = fopen(pFilename, "wb");
-      fwrite(pPNG_data, 1, png_data_size, pFile);
-      fclose(pFile);
-      Serial.printf("Wrote %s. Total time %u ms\n", pFilename, millis()-time_start);
+      Serial.printf("Compression time %u ms\n", millis()-time1);
+      time1 = millis();
+      File pFile = SPIFFS.open(pFilename, "w");
+      pFile.write((const uint8_t*)pPNG_data, png_data_size);
+      pFile.close();
+      Serial.printf("Wrote %s. Write time %u ms\n", pFilename, millis()-time1);
     }
 
     free(pPNG_data);
@@ -166,7 +167,13 @@ int writePng(const char* pFilename)
 void setup() {
     Serial.begin(115200);
     SPIFFS.begin(true);
-    writePng("/spiffs/mandelbrot.png");
+    Serial.printf("Will use ~%u of %u bytes memory\n", rawImg * 2, ESP.getFreePsram());
+    if ((rawImg * 2) > ESP.getFreePsram()) {
+      Serial.println("Not enough memory to build the image");
+      return;
+    }
+    uint32_t file_size = writePng("/mandelbrot.png");
+    Serial.printf("Compressed %u byte image to %u bytes\n", rawImg, file_size);
     WiFi.begin(ssid,passwd);
     WiFi.waitForConnectResult();
     Serial.println("IP");
